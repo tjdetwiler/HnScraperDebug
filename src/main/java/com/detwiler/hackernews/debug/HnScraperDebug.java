@@ -95,7 +95,7 @@ public class HnScraperDebug implements Runnable, HnSessionManager.CredentialDele
         HnScraper scraper = new HnScraper();
         scraper.setCredentialDelegate(this);
         try {
-            scraper.setActiveUser("tjdetwiler");
+            scraper.setActiveUser(mCredentials.keySet().iterator().next());
         } catch (final AuthenticationException e) {
             System.out.println("Unable to authenticate user: " + e);
             System.exit(1);
