@@ -1,0 +1,4 @@
+include ':HackerNewsScraper'
+
+findProject(':HackerNewsScraper').projectDir = new File(rootDir, '../HackerNewsScraper')
+println findProject(':HackerNewsScraper').projectDir
