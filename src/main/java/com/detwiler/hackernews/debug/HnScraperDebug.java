@@ -1,21 +1,13 @@
 package com.detwiler.hackernews.debug;
 
-import com.detwiler.hackernews.HnAuthenticationException;
-import com.detwiler.hackernews.model.HnComment;
-import com.detwiler.hackernews.HnPostCategory;
-import com.detwiler.hackernews.HnScraper;
-import com.detwiler.hackernews.model.HnPost;
-import com.detwiler.hackernews.model.HnSubmission;
-import com.detwiler.hackernews.server.HnPostDocument;
-import com.detwiler.hackernews.server.HnPostListDocument;
-import com.detwiler.hackernews.server.HnSessionManager;
+import com.detwiler.hackernews.*;
 
 import java.io.*;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 
-public class HnScraperDebug implements Runnable, HnSessionManager.CredentialDelegate {
+public class HnScraperDebug implements Runnable, HnCredentialDelegate {
     private static final String ACCOUNT_RESOURCE_FILE = "/accounts.cfg";
     private Map<String, String> mCredentials;
 
