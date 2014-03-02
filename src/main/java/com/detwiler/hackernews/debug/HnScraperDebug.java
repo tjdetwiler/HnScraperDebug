@@ -1,28 +1,36 @@
 package com.detwiler.hackernews.debug;
 
-import com.detwiler.hackernews.AuthenticationException;
+import com.detwiler.hackernews.HnAuthenticationException;
 import com.detwiler.hackernews.model.HnComment;
 import com.detwiler.hackernews.HnPostCategory;
 import com.detwiler.hackernews.HnScraper;
+import com.detwiler.hackernews.model.HnPost;
 import com.detwiler.hackernews.model.HnSubmission;
 import com.detwiler.hackernews.server.HnPostDocument;
 import com.detwiler.hackernews.server.HnPostListDocument;
 import com.detwiler.hackernews.server.HnSessionManager;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 
 public class HnScraperDebug implements Runnable, HnSessionManager.CredentialDelegate {
+    private static final String ACCOUNT_RESOURCE_FILE = "/accounts.cfg";
     private Map<String, String> mCredentials;
+
+    public static void main(final String[] args) {
+        new HnScraperDebug().run();
+    }
 
     public HnScraperDebug() {
         mCredentials = new HashMap<>();
         try {
-            BufferedReader reader = new BufferedReader(new FileReader(new File("HnScraperDebug/src/main/resources/accounts.cfg")));
+            final InputStream is = getClass().getResourceAsStream(ACCOUNT_RESOURCE_FILE);
+            if (is == null) {
+                throw new FileNotFoundException("Missing resource file: " + ACCOUNT_RESOURCE_FILE);
+            }
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
             String line = reader.readLine();
             while (line != null) {
                 String[] userpass = line.split(",");
@@ -30,86 +38,75 @@ public class HnScraperDebug implements Runnable, HnSessionManager.CredentialDele
                 line = reader.readLine();
             }
             reader.close();
-        } catch (final Exception e) {
-            System.out.println("Exception while loading credentials: " + e);
-            System.exit(1);
+        } catch (final Exception ex) {
+            unexpectedException("loading credentials", ex);
         }
     }
 
-    private void dumpDocument(final HnPostListDocument doc) {
-        for (HnSubmission post : doc.getPosts()) {
-            System.out.println(post);
-        }
-        System.out.println("More: " + doc.getNextPageHref());
-    }
-
-    private void readPostLists(final HnScraper scraper) {
-        HnPostListDocument doc;
-        try {
-            HnPostCategory[] categories = HnPostCategory.values();
-            for (final HnPostCategory category : categories) {
-                System.out.println("Reading category: " + category);
-                doc = scraper.getPostsForCategory(category);
-                for (int i=0; i<1; ++i) {
-                    dumpDocument(doc);
-                    if (!doc.hasMore()) {
-                        break;
-                    }
-                    doc = doc.more();
-                }
-            }
-        } catch (IOException e) {
-            System.out.println("ERROR: Unable to connect to HN server");
-            System.exit(-1);
-            return;
-        }
-    }
-
-    private static void readPost(final HnScraper scraper, final String id) {
-        HnPostDocument doc;
-        try {
-            doc = scraper.getPost(id);
-            for (final HnComment comment : doc.getComments()) {
-                int depth = 0;
-                HnComment parent = comment.getParent();
-                while (parent != null) {
-                    depth++;
-                    parent = parent.getParent();
-                }
-                String indent = "";
-                for (int i=0; i<depth; ++i) {
-                    indent += "\t";
-                }
-                System.out.println(indent + "Comment '" + comment.getPostId() + "' by " + comment.getUsername() + ":");
-                System.out.println(indent + comment.getText());
-            }
-        } catch (IOException e) {
-            System.out.println("ERROR: Unable to connect to HN server");
-            System.exit(-1);
-            return;
-        }
+    @Override
+    public String getPasswordForUser(final String username) {
+        return mCredentials.get(username);
     }
 
     @Override
     public void run() {
-        HnScraper scraper = new HnScraper();
+        String action = "";
+        final HnScraper scraper = new HnScraper();
         scraper.setCredentialDelegate(this);
         try {
+            action = "authenticating user";
             scraper.setActiveUser(mCredentials.keySet().iterator().next());
-        } catch (final AuthenticationException e) {
-            System.out.println("Unable to authenticate user: " + e);
-            System.exit(1);
+        } catch (final HnAuthenticationException e) {
+            unexpectedException(action, e);
         }
-        // readPost(scraper, "6706065");
-        readPostLists(scraper);
+
+        try {
+            final HnPostDocument doc;
+            final Map<HnPostCategory, HnPostListDocument> postLists = new EnumMap<>(HnPostCategory.class);
+            HnPostListDocument postListDoc;
+            for (HnPostCategory category : HnPostCategory.values()) {
+                action = "reading post category " + category;
+                postListDoc = scraper.getPostsForCategory(HnPostCategory.TOP);
+                postLists.put(category, postListDoc);
+                System.out.println("\n\n\n" + category + ": ");
+                for (final HnSubmission post : postListDoc.getPosts()) {
+                    System.out.println(post.getTitle());
+                }
+            }
+            System.out.println("\n\n\nComments on Top Post: ");
+            final HnPost topPost = postLists.get(HnPostCategory.TOP).getPosts().get(0);
+            action = "reading post " + topPost.getPostId();
+            doc = scraper.getPost(topPost);
+            for (final HnComment comment : doc.getComments()) {
+                printComment(comment);
+            }
+        } catch (final IOException e) {
+            unexpectedException(action ,e);
+        }
     }
 
-    public static void main(String[] args) {
-        new HnScraperDebug().run();
+    private void printComment(final HnComment comment) {
+        printComment(comment, 0);
     }
 
-    @Override
-    public String getPasswordForUser(String username) {
-        return mCredentials.get(username);
+    private void printComment(final HnComment comment, final int depth) {
+        String indent = "";
+        for (int i=0; i<depth; ++i) {
+            indent += "\t";
+        }
+        System.out.println(indent + "Comment '" + comment.getPostId() + "' by " + comment.getUsername() + " (" + comment.getReplies().size() + " replies) :");
+        System.out.println(indent + comment.getText() + "\n");
+        for (final HnComment response : comment.getReplies()) {
+            printComment(response, depth + 1);
+        }
+    }
+
+    private void unexpectedException(final String action, final Exception ex) {
+        System.out.println("Exception while " + action + ": " + ex);
+        for (StackTraceElement e : ex.getStackTrace()) {
+            System.out.printf("\t");
+            System.out.println(e);
+        }
+        System.exit(1);
     }
 }
